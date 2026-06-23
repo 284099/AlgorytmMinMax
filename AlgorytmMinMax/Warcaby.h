@@ -19,4 +19,7 @@ public:
     int ocenPozycje();
     void wyswietlPlansze();
     void wyswietlInstrukcje();
+
+    // Dodano metodê do pobierania biæ tylko dla jednego pola
+    std::vector<Ruch> pobierzBiciaZPola(int w, int k, int aktualnaTura);
 };

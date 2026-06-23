@@ -40,6 +40,62 @@ bool Warcaby::nalezyDoAktualnego(Pole p, int aktualnaTura) {
     }
 }
 
+// Pobieranie dostêpnych biæ dla wybranego pionka z uwzglêdnieniem d³ugiego zasiêgu damki
+std::vector<Ruch> Warcaby::pobierzBiciaZPola(int w, int k, int aktualnaTura) {
+    vector<Ruch> bicia;
+    if (!nalezyDoAktualnego(plansza[w][k], aktualnaTura)) return bicia;
+
+    Pole p = plansza[w][k];
+    bool czyDamka = (p == BIALA_DAMKA || p == CZARNA_DAMKA);
+
+    vector<pair<int, int>> kierunki = { {1, -1}, {1, 1}, {-1, -1}, {-1, 1} };
+
+    for (auto kierunek : kierunki) {
+        int nw = w + kierunek.first;
+        int nk = k + kierunek.second;
+
+        if (czyDamka) {
+            // Logika dalekiego bicia dla damki
+            bool znalezionoPrzeciwnika = false;
+            int wrogWiersz = -1, wrogKolumna = -1;
+
+            while (nw >= 0 && nw < 8 && nk >= 0 && nk < 8) {
+                if (plansza[nw][nk] == PUSTE) {
+                    if (znalezionoPrzeciwnika) {
+                        // Jeœli wczeœniej miniêto wroga, ka¿de puste pole za nim jest prawid³owym l¹dowaniem bicia
+                        bicia.push_back({ w, k, nw, nk, true });
+                    }
+                }
+                else if (czyPrzeciwnik(plansza[nw][nk], aktualnaTura)) {
+                    if (znalezionoPrzeciwnika) break; // Napotkanie drugiego wroga blokuje liniê
+                    znalezionoPrzeciwnika = true;
+                    wrogWiersz = nw;
+                    wrogKolumna = nk;
+                }
+                else {
+                    break; // Napotkanie w³asnego pionka blokuje liniê
+                }
+                nw += kierunek.first;
+                nk += kierunek.second;
+            }
+        }
+        else {
+            // Logika bicia dla zwyk³ego pionka (zasiêg o 1 pole przed siebie/za siebie)
+            if (nw >= 0 && nw < 8 && nk >= 0 && nk < 8) {
+                if (czyPrzeciwnik(plansza[nw][nk], aktualnaTura)) {
+                    int nnw = nw + kierunek.first;
+                    int nnk = nk + kierunek.second;
+                    if (nnw >= 0 && nnw < 8 && nnk >= 0 && nnk < 8 && plansza[nnw][nnk] == PUSTE) {
+                        bicia.push_back({ w, k, nnw, nnk, true });
+                    }
+                }
+            }
+        }
+    }
+    return bicia;
+}
+
+// Aktualizacja g³ównej metody generowania ruchów, aby równie¿ uwzglêdnia³a daleki zasiêg damki
 std::vector<Ruch> Warcaby::pobierzDozwoloneRuchy(int aktualnaTura) {
     vector<Ruch> zwykleRuchy;
     vector<Ruch> bicia;
@@ -51,31 +107,36 @@ std::vector<Ruch> Warcaby::pobierzDozwoloneRuchy(int aktualnaTura) {
             Pole p = plansza[w][k];
             bool czyDamka = (p == BIALA_DAMKA || p == CZARNA_DAMKA);
 
-            vector<pair<int, int>> kierunki;
-            if (czyDamka || p == CZARNY_PIONEK) 
-            {
-                    kierunki.push_back({ 1, -1 }); 
-                    kierunki.push_back({ 1, 1 }); 
-            }
-            if (czyDamka || p == BIALY_PIONEK) 
-            { 
-                kierunki.push_back({ -1, -1 }); 
-                kierunki.push_back({ -1, 1 }); 
-            }
+            // Wyszukiwanie biæ dla danego pola
+            vector<Ruch> lokalneBicia = pobierzBiciaZPola(w, k, aktualnaTura);
+            bicia.insert(bicia.end(), lokalneBicia.begin(), lokalneBicia.end());
 
-            for (auto kierunek : kierunki) {
-                int nw = w + kierunek.first;
-                int nk = k + kierunek.second;
+            // Generowanie zwyk³ych ruchów, jeœli lista biæ jest pusta
+            if (bicia.empty()) {
+                vector<pair<int, int>> kierunki;
+                if (czyDamka || p == CZARNY_PIONEK) {
+                    kierunki.push_back({ 1, -1 });
+                    kierunki.push_back({ 1, 1 });
+                }
+                if (czyDamka || p == BIALY_PIONEK) {
+                    kierunki.push_back({ -1, -1 });
+                    kierunki.push_back({ -1, 1 });
+                }
 
-                if (nw >= 0 && nw < 8 && nk >= 0 && nk < 8) {
-                    if (plansza[nw][nk] == PUSTE) {
-                        zwykleRuchy.push_back({ w, k, nw, nk, false });
+                for (auto kierunek : kierunki) {
+                    int nw = w + kierunek.first;
+                    int nk = k + kierunek.second;
+
+                    if (czyDamka) {
+                        while (nw >= 0 && nw < 8 && nk >= 0 && nk < 8 && plansza[nw][nk] == PUSTE) {
+                            zwykleRuchy.push_back({ w, k, nw, nk, false });
+                            nw += kierunek.first;
+                            nk += kierunek.second;
+                        }
                     }
-                    else if (czyPrzeciwnik(plansza[nw][nk], aktualnaTura)) {
-                        int nnw = nw + kierunek.first;
-                        int nnk = nk + kierunek.second;
-                        if (nnw >= 0 && nnw < 8 && nnk >= 0 && nnk < 8 && plansza[nnw][nnk] == PUSTE) {
-                            bicia.push_back({ w, k, nnw, nnk, true });
+                    else {
+                        if (nw >= 0 && nw < 8 && nk >= 0 && nk < 8 && plansza[nw][nk] == PUSTE) {
+                            zwykleRuchy.push_back({ w, k, nw, nk, false });
                         }
                     }
                 }
@@ -90,9 +151,22 @@ void Warcaby::wykonajRuch(const Ruch& r) {
     plansza[r.zWiersza][r.zKolumny] = PUSTE;
 
     if (r.czyBicie) {
-        int srodekWiersza = (r.zWiersza + r.doWiersza) / 2;
-        int srodekKolumny = (r.zKolumny + r.doKolumny) / 2;
-        plansza[srodekWiersza][srodekKolumny] = PUSTE;
+        // Wyznaczanie kierunku ruchu w celu znalezienia i usuniêcia pionka przeciwnika
+        int kierunekWiersza = (r.doWiersza > r.zWiersza) ? 1 : -1;
+        int kierunekKolumny = (r.doKolumny > r.zKolumny) ? 1 : -1;
+
+        int sprawdzanyWiersz = r.zWiersza + kierunekWiersza;
+        int sprawdzanyKolumna = r.zKolumny + kierunekKolumny;
+
+        // Przeszukiwanie linii w celu wyczyszczenia napotkanego wroga
+        while (sprawdzanyWiersz != r.doWiersza && sprawdzanyKolumna != r.doKolumny) {
+            if (plansza[sprawdzanyWiersz][sprawdzanyKolumna] != PUSTE) {
+                plansza[sprawdzanyWiersz][sprawdzanyKolumna] = PUSTE;
+                break;
+            }
+            sprawdzanyWiersz += kierunekWiersza;
+            sprawdzanyKolumna += kierunekKolumny;
+        }
     }
 
     if (p == BIALY_PIONEK && r.doWiersza == 0) p = BIALA_DAMKA;
@@ -103,8 +177,6 @@ void Warcaby::wykonajRuch(const Ruch& r) {
     char zK = 'A' + r.zKolumny;
     char doK = 'A' + r.doKolumny;
     ostatniRuchOpis = string(1, zK) + to_string(8 - r.zWiersza) + " -> " + string(1, doK) + to_string(8 - r.doWiersza) + (r.czyBicie ? " [BICIE]" : "");
-
-    tura = (tura == BIALY_PIONEK) ? CZARNY_PIONEK : BIALY_PIONEK;
 }
 
 int Warcaby::ocenPozycje() {
